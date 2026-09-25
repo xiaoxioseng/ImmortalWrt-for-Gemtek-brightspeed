@@ -1,0 +1,94 @@
+name: Build XR1710G Mesh Perf V1
+
+on:
+  push:
+    branches:
+      - XR1710G_MESH_PERF_V1
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout experiment branch
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup build environment
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential clang gcc g++ binutils bzip2 gawk gettext git libncurses-dev libssl-dev python3 python3-setuptools rsync unzip wget xsltproc zlib1g-dev file which perl sed make
+
+      - name: Install feeds
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          bash scripts/fix-stale-golang-host.sh
+
+      - name: Apply feed patches
+        run: FEED_PATCHES_STRICT=1 bash scripts/apply-feed-patches.sh
+
+      - name: Configure XR1710G
+        run: |
+          cp 1710.config .config
+          build_date=$(TZ=Asia/Shanghai date +'%Y%m%d')
+          repo_commit=$(git rev-parse --short=8 HEAD)
+          git remote add immortalwrt https://github.com/immortalwrt/immortalwrt.git 2>/dev/null || true
+          git remote set-url immortalwrt https://github.com/immortalwrt/immortalwrt.git
+          git fetch --no-tags immortalwrt master
+          upstream_base=$(git merge-base HEAD immortalwrt/master)
+          upstream_commit=$(git rev-parse --short=8 "$upstream_base")
+          BUILD_DATE="$build_date" \
+          BUILD_ID="${build_date}-${repo_commit}-${upstream_commit}" \
+          REPO_COMMIT="$repo_commit" \
+          UPSTREAM_COMMIT="$upstream_commit" \
+          VERSION_CODE="${build_date}-${repo_commit}-${upstream_commit}" \
+          bash scripts/set-build-version.sh .config
+          make defconfig
+          bash scripts/check-gemtek-profile-isolation.sh --config .config
+
+      - name: Download sources
+        run: make download -j$(nproc)
+
+      - name: Build firmware
+        shell: bash
+        run: |
+          set -o pipefail
+          make -j2 world 2>&1 | tee build.log
+
+      - name: Verbose retry on build failure
+        if: failure()
+        shell: bash
+        run: |
+          failed_pkg=$(grep 'ERROR:.*failed to build' build.log | head -1 | sed 's/.*ERROR: \(.*\) failed to build.*/\1/' || true)
+          if [ -n "$failed_pkg" ]; then
+            echo "=== Rebuilding $failed_pkg with V=s ==="
+            make "package/$failed_pkg/compile" V=s -j1 2>&1 | tee build-verbose.log || true
+            grep -nE "error:|Error [0-9]|FAILED|Patch failed|No rule to make target" build-verbose.log | head -80 || true
+            tail -120 build-verbose.log || true
+          else
+            tail -200 build.log || true
+          fi
+
+      - name: Upload build artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: xr1710g-mesh-perf-v1
+          path: |
+            build.log
+            build-verbose.log
+            bin/targets/airoha/an7581/*.itb
+            bin/targets/airoha/an7581/*manifest
+            bin/targets/airoha/an7581/config.buildinfo
+            bin/targets/airoha/an7581/feeds.buildinfo
+            bin/targets/airoha/an7581/version.buildinfo
+            bin/targets/airoha/an7581/sha256sums
+          retention-days: 30
