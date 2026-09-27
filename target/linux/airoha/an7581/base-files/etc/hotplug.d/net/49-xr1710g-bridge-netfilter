@@ -1,0 +1,20 @@
+#!/bin/sh
+# XR1710G: allow bridged br-lan IP traffic to enter netfilter so nft
+# flowtable/PPE can learn and offload Ethernet <-> Wi-Fi/802.11s flows.
+# Scope this to br-lan only; do not impose bridge netfilter on arbitrary
+# user-created bridges.
+
+[ "$(board_name 2>/dev/null)" = "gemtek,xr1710g-ubi" ] || exit 0
+[ "$ACTION" = "add" ] || exit 0
+[ "$DEVICENAME" = "br-lan" ] || exit 0
+
+bridge=/sys/devices/virtual/net/br-lan/bridge
+[ -d "$bridge" ] || exit 0
+
+[ -w "$bridge/nf_call_iptables" ] && echo 1 > "$bridge/nf_call_iptables"
+[ -w "$bridge/nf_call_ip6tables" ] && echo 1 > "$bridge/nf_call_ip6tables"
+
+logger -t xr1710g-flow-offload \
+	"enabled bridge netfilter on br-lan for PPE bridge offload"
+
+exit 0
