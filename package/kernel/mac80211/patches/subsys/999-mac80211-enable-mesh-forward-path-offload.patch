@@ -21,12 +21,12 @@ This allows bridge/PPE flow offload to reuse mac80211's current mesh route
 selection while preserving software handling for non-offloaded traffic.
 
 ---
- net/mac80211/iface.c | 39 +++++++++++++++++++++++++++++++++++++++
- 1 file changed, 39 insertions(+)
+ net/mac80211/iface.c | 37 +++++++++++++++++++++++++++++++++++++
+ 1 file changed, 37 insertions(+)
 
 --- a/net/mac80211/iface.c
 +++ b/net/mac80211/iface.c
-@@ -940,6 +940,10 @@ static int ieee80211_netdev_setup_tc(str
+@@ -940,6 +940,9 @@ static int ieee80211_netdev_setup_tc(str
  	return drv_net_setup_tc(local, sdata, dev, type, type_data);
  }
  
@@ -36,7 +36,7 @@ selection while preserving software handling for non-offloaded traffic.
  static const struct net_device_ops ieee80211_dataif_ops = {
  	.ndo_open		= ieee80211_open,
  	.ndo_stop		= ieee80211_stop,
-@@ -948,6 +952,7 @@ static const struct net_device_ops ieee8
+@@ -948,6 +951,7 @@ static const struct net_device_ops ieee8
  	.ndo_set_rx_mode	= ieee80211_set_multicast_list,
  	.ndo_set_mac_address 	= ieee80211_change_mac,
  	.ndo_setup_tc		= ieee80211_netdev_setup_tc,
@@ -44,7 +44,7 @@ selection while preserving software handling for non-offloaded traffic.
  };
  
  static u16 ieee80211_monitor_select_queue(struct net_device *dev,
-@@ -1035,6 +1040,40 @@ static int ieee80211_netdev_fill_forward
+@@ -1035,6 +1039,39 @@ static int ieee80211_netdev_fill_forward
  
  		sta = sta_info_get(sdata, sdata->deflink.u.mgd.bssid);
  		break;
