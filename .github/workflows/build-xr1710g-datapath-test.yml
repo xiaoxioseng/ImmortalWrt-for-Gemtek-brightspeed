@@ -1,0 +1,94 @@
+name: Build XR1710G Datapath Test
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: 'Source branch or commit to build'
+        required: true
+        default: 'xr1710g-datapath-stability-20260927'
+        type: string
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout selected source
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.source_ref }}
+          fetch-depth: 0
+
+      - name: Show source revision
+        run: |
+          echo "source_ref=${{ inputs.source_ref }}"
+          git rev-parse --short=12 HEAD
+          git status --short
+
+      - name: Setup build environment
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential clang gcc g++ binutils bzip2 gawk gettext git libncurses-dev libssl-dev python3 python3-setuptools rsync unzip wget xsltproc zlib1g-dev file which perl sed make
+
+      - name: Install feeds
+        run: |
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+          bash scripts/fix-stale-golang-host.sh
+
+      - name: Apply feed patches
+        run: FEED_PATCHES_STRICT=1 bash scripts/apply-feed-patches.sh
+
+      - name: Configure XR1710G
+        run: |
+          cp 1710.config .config
+          make defconfig
+          bash scripts/check-gemtek-profile-isolation.sh --config .config
+
+      - name: Download sources
+        run: make download -j$(nproc)
+
+      - name: Build firmware
+        shell: bash
+        run: |
+          set -o pipefail
+          make -j2 world 2>&1 | tee build.log
+
+      - name: Capture verbose failure
+        if: failure()
+        shell: bash
+        run: |
+          failed_pkg=$(grep 'ERROR:.*failed to build' build.log | head -1 | sed 's/.*ERROR: \(.*\) failed to build.*/\1/' || true)
+          if [ -n "$failed_pkg" ]; then
+            echo "=== Rebuilding $failed_pkg with V=s ==="
+            make "package/$failed_pkg/compile" V=s -j1 2>&1 | tee build-verbose.log || true
+          fi
+          grep -nE 'error:|Error [0-9]|FAILED|Patch failed|No rule to make target' build-verbose.log 2>/dev/null | head -80 || true
+
+      - name: List output
+        if: always()
+        run: |
+          ls -la bin/targets/airoha/an7581/ 2>/dev/null || true
+          tail -100 build.log 2>/dev/null || true
+
+      - name: Upload firmware and logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: xr1710g-datapath-test
+          path: |
+            build.log
+            build-verbose.log
+            bin/targets/airoha/an7581/*.itb
+            bin/targets/airoha/an7581/*manifest
+            bin/targets/airoha/an7581/config.buildinfo
+            bin/targets/airoha/an7581/feeds.buildinfo
+            bin/targets/airoha/an7581/version.buildinfo
+            bin/targets/airoha/an7581/sha256sums
+          retention-days: 30
