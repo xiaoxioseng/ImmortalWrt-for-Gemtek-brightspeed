@@ -20,26 +20,6 @@ ifaces_for_radio() {
 		-e "s/^wireless\.\([^.=]*\)\.device=$1$/\1/p"
 }
 
-set_hostapd_eht_bf() {
-	local radio="$1"
-	local opt
-
-	# Current wifi-scripts emits HE beamforming but omits the EHT equivalents.
-	# Keep the UCI booleans for the eventual generic fix and also inject the
-	# hostapd keys explicitly so EHT AP/client traffic gets beamforming now.
-	uci -q set wireless."$radio".eht_su_beamformer='1'
-	uci -q set wireless."$radio".eht_su_beamformee='1'
-	uci -q set wireless."$radio".eht_mu_beamformer='1'
-
-	for opt in \
-		'eht_su_beamformer=1' \
-		'eht_su_beamformee=1' \
-		'eht_mu_beamformer=1'; do
-		uci -q del_list wireless."$radio".hostapd_options="$opt" 2>/dev/null || true
-		uci -q add_list wireless."$radio".hostapd_options="$opt"
-	done
-}
-
 changed=0
 for radio in $(radios_for_6g); do
 	has_mesh=0
@@ -59,10 +39,11 @@ for radio in $(radios_for_6g); do
 			# Channel 37 is a 6 GHz PSC primary inside a valid 320 MHz block.
 			uci -q set wireless."$radio".channel='37'
 			uci -q set wireless."$radio".htmode='EHT320'
+			# These HE controls are consumed by the current wifi-scripts and
+			# remain relevant when EHT operates on top of HE capabilities.
 			uci -q set wireless."$radio".he_su_beamformer='1'
 			uci -q set wireless."$radio".he_su_beamformee='1'
 			uci -q set wireless."$radio".he_mu_beamformer='1'
-			set_hostapd_eht_bf "$radio"
 			changed=1
 			;;
 		*)
