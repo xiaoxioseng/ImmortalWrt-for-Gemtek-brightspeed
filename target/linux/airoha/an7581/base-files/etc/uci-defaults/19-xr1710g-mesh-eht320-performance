@@ -1,0 +1,59 @@
+#!/bin/sh
+# XR1710G close-range wireless-mesh performance profile.
+#
+# Keep 2.4/5 GHz client coverage untouched.  Only promote an existing
+# 6 GHz 802.11s mesh radio on PSC channel 37 (or auto) to EHT320, where
+# both XR1710G nodes can use the MT7996 320 MHz datapath.  Do not create a
+# mesh, change keys/SSID, or rewrite a user-selected non-37 channel.
+
+[ "$(board_name 2>/dev/null)" = "gemtek,xr1710g-ubi" ] || exit 0
+
+radios_for_6g() {
+	uci -q show wireless 2>/dev/null | sed -n \
+		-e "s/^wireless\.\([^.=]*\)\.band='6g'$/\1/p" \
+		-e "s/^wireless\.\([^.=]*\)\.band=6g$/\1/p"
+}
+
+ifaces_for_radio() {
+	uci -q show wireless 2>/dev/null | sed -n \
+		-e "s/^wireless\.\([^.=]*\)\.device='$1'$/\1/p" \
+		-e "s/^wireless\.\([^.=]*\)\.device=$1$/\1/p"
+}
+
+changed=0
+for radio in $(radios_for_6g); do
+	has_mesh=0
+	for iface in $(ifaces_for_radio "$radio"); do
+		[ "$(uci -q get wireless."$iface".mode 2>/dev/null)" = "mesh" ] || continue
+		has_mesh=1
+		# Keep forwarding enabled on the dedicated backhaul.
+		uci -q set wireless."$iface".mesh_fwding='1'
+	done
+	[ "$has_mesh" -eq 1 ] || continue
+
+	channel="$(uci -q get wireless."$radio".channel 2>/dev/null || true)"
+	case "$channel" in
+		''|auto|37)
+			# Channel 37 is a 6 GHz PSC primary inside a valid 320 MHz block.
+			uci -q set wireless."$radio".channel='37'
+			uci -q set wireless."$radio".htmode='EHT320'
+			uci -q set wireless."$radio".he_su_beamformer='1'
+			uci -q set wireless."$radio".he_mu_beamformer='1'
+			uci -q set wireless."$radio".eht_su_beamformer='1'
+			uci -q set wireless."$radio".eht_mu_beamformer='1'
+			changed=1
+			;;
+		*)
+			logger -t xr1710g-mesh-perf \
+				"leave $radio unchanged: user channel $channel is not the validated PSC 37 profile"
+			;;
+	esac
+done
+
+if [ "$changed" -eq 1 ]; then
+	uci -q commit wireless
+	logger -t xr1710g-mesh-perf \
+		"enabled 6 GHz EHT320 mesh performance profile on channel 37"
+fi
+
+exit 0
