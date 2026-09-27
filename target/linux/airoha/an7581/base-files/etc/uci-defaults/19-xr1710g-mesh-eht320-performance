@@ -1,9 +1,9 @@
 #!/bin/sh
 # XR1710G close-range wireless-mesh performance profile.
 #
-# Keep 2.4/5 GHz client coverage untouched.  Only promote an existing
+# Keep 2.4/5 GHz client coverage untouched. Only promote an existing
 # 6 GHz 802.11s mesh radio on PSC channel 37 (or auto) to EHT320, where
-# both XR1710G nodes can use the MT7996 320 MHz datapath.  Do not create a
+# both XR1710G nodes can use the MT7996 320 MHz datapath. Do not create a
 # mesh, change keys/SSID, or rewrite a user-selected non-37 channel.
 
 [ "$(board_name 2>/dev/null)" = "gemtek,xr1710g-ubi" ] || exit 0
@@ -20,14 +20,36 @@ ifaces_for_radio() {
 		-e "s/^wireless\.\([^.=]*\)\.device=$1$/\1/p"
 }
 
+set_hostapd_eht_bf() {
+	local radio="$1"
+	local opt
+
+	# Current wifi-scripts emits HE beamforming but omits the EHT equivalents.
+	# Keep the UCI booleans for the eventual generic fix and also inject the
+	# hostapd keys explicitly so EHT AP/client traffic gets beamforming now.
+	uci -q set wireless."$radio".eht_su_beamformer='1'
+	uci -q set wireless."$radio".eht_su_beamformee='1'
+	uci -q set wireless."$radio".eht_mu_beamformer='1'
+
+	for opt in \
+		'eht_su_beamformer=1' \
+		'eht_su_beamformee=1' \
+		'eht_mu_beamformer=1'; do
+		uci -q del_list wireless."$radio".hostapd_options="$opt" 2>/dev/null || true
+		uci -q add_list wireless."$radio".hostapd_options="$opt"
+	done
+}
+
 changed=0
 for radio in $(radios_for_6g); do
 	has_mesh=0
 	for iface in $(ifaces_for_radio "$radio"); do
 		[ "$(uci -q get wireless."$iface".mode 2>/dev/null)" = "mesh" ] || continue
 		has_mesh=1
-		# Keep forwarding enabled on the dedicated backhaul.
+		# Keep forwarding enabled and power saving disabled on the backhaul.
 		uci -q set wireless."$iface".mesh_fwding='1'
+		uci -q set wireless."$iface".powersave='0'
+		uci -q set wireless."$iface".mesh_power_mode='active'
 	done
 	[ "$has_mesh" -eq 1 ] || continue
 
@@ -38,9 +60,9 @@ for radio in $(radios_for_6g); do
 			uci -q set wireless."$radio".channel='37'
 			uci -q set wireless."$radio".htmode='EHT320'
 			uci -q set wireless."$radio".he_su_beamformer='1'
+			uci -q set wireless."$radio".he_su_beamformee='1'
 			uci -q set wireless."$radio".he_mu_beamformer='1'
-			uci -q set wireless."$radio".eht_su_beamformer='1'
-			uci -q set wireless."$radio".eht_mu_beamformer='1'
+			set_hostapd_eht_bf "$radio"
 			changed=1
 			;;
 		*)
@@ -53,7 +75,7 @@ done
 if [ "$changed" -eq 1 ]; then
 	uci -q commit wireless
 	logger -t xr1710g-mesh-perf \
-		"enabled 6 GHz EHT320 mesh performance profile on channel 37"
+		"enabled 6 GHz EHT320 mesh profile on channel 37 with active mesh power mode"
 fi
 
 exit 0
