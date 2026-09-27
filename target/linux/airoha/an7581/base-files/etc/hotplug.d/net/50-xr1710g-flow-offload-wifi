@@ -4,6 +4,8 @@
 # start, so without a reload they can be absent from the PPE flowtable and
 # bridged Ethernet<->Wi-Fi/Mesh traffic stays on the CPU path.
 
+. /lib/functions/system.sh
+
 [ "$(board_name 2>/dev/null)" = "gemtek,xr1710g-ubi" ] || exit 0
 [ "$ACTION" = "add" ] || exit 0
 
