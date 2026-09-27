@@ -6,6 +6,8 @@
 # both XR1710G nodes can use the MT7996 320 MHz datapath. Do not create a
 # mesh, change keys/SSID, or rewrite a user-selected non-37 channel.
 
+. /lib/functions/system.sh
+
 [ "$(board_name 2>/dev/null)" = "gemtek,xr1710g-ubi" ] || exit 0
 
 radios_for_6g() {
