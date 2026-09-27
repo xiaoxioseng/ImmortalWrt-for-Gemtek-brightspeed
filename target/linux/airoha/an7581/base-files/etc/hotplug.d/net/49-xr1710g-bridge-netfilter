@@ -4,6 +4,8 @@
 # Scope this to br-lan only; do not impose bridge netfilter on arbitrary
 # user-created bridges.
 
+. /lib/functions/system.sh
+
 [ "$(board_name 2>/dev/null)" = "gemtek,xr1710g-ubi" ] || exit 0
 [ "$ACTION" = "add" ] || exit 0
 [ "$DEVICENAME" = "br-lan" ] || exit 0
