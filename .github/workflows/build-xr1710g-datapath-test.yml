@@ -8,9 +8,15 @@ on:
         required: true
         default: 'xr1710g-datapath-stability-20260927'
         type: string
+  push:
+    branches:
+      - master
+    paths:
+      - '.github/workflows/build-xr1710g-datapath-test.yml'
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  DEFAULT_SOURCE_REF: xr1710g-datapath-stability-20260927
 
 jobs:
   build:
@@ -19,16 +25,32 @@ jobs:
       contents: read
 
     steps:
+      - name: Resolve source ref
+        id: source
+        shell: bash
+        run: |
+          ref='${{ github.event.inputs.source_ref }}'
+          if [ -z "$ref" ]; then
+            ref="$DEFAULT_SOURCE_REF"
+          fi
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "Building source ref: $ref"
+
       - name: Checkout selected source
         uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.source_ref }}
+          ref: ${{ steps.source.outputs.ref }}
           fetch-depth: 0
 
       - name: Show source revision
+        shell: bash
         run: |
-          echo "source_ref=${{ inputs.source_ref }}"
-          git rev-parse --short=12 HEAD
+          {
+            echo "requested_ref=${{ steps.source.outputs.ref }}"
+            echo "resolved_sha=$(git rev-parse HEAD)"
+            echo "resolved_short_sha=$(git rev-parse --short=12 HEAD)"
+            echo "branch=$(git branch --show-current)"
+          } | tee build-source.txt
           git status --short
 
       - name: Setup build environment
@@ -64,18 +86,34 @@ jobs:
         if: failure()
         shell: bash
         run: |
+          set +e
+          : > build-verbose.log
+
           failed_pkg=$(grep 'ERROR:.*failed to build' build.log | head -1 | sed 's/.*ERROR: \(.*\) failed to build.*/\1/' || true)
-          if [ -n "$failed_pkg" ]; then
-            echo "=== Rebuilding $failed_pkg with V=s ==="
-            make "package/$failed_pkg/compile" V=s -j1 2>&1 | tee build-verbose.log || true
+          echo "Detected failed target/package: ${failed_pkg:-<none>}" | tee -a build-verbose.log
+
+          if [ "$failed_pkg" = "target/linux" ]; then
+            echo "=== Rebuilding target/linux with V=s -j1 ===" | tee -a build-verbose.log
+            make target/linux/compile V=s -j1 2>&1 | tee -a build-verbose.log
+          elif [ -n "$failed_pkg" ]; then
+            echo "=== Rebuilding package/$failed_pkg/compile with V=s -j1 ===" | tee -a build-verbose.log
+            make "package/$failed_pkg/compile" V=s -j1 2>&1 | tee -a build-verbose.log
+          else
+            echo "=== Could not identify failed package; rebuilding target/linux first ===" | tee -a build-verbose.log
+            make target/linux/compile V=s -j1 2>&1 | tee -a build-verbose.log
           fi
-          grep -nE 'error:|Error [0-9]|FAILED|Patch failed|No rule to make target' build-verbose.log 2>/dev/null | head -80 || true
+
+          echo "=== Error summary ===" | tee -a build-verbose.log
+          grep -niE 'error:|fatal error:|Error [0-9]|FAILED|Patch failed|Hunk #[0-9]+ FAILED|No rule to make target|not found' build-verbose.log | head -160 || true
 
       - name: List output
         if: always()
         run: |
           ls -la bin/targets/airoha/an7581/ 2>/dev/null || true
-          tail -100 build.log 2>/dev/null || true
+          echo '=== build.log tail ==='
+          tail -160 build.log 2>/dev/null || true
+          echo '=== build-verbose.log error summary ==='
+          grep -niE 'error:|fatal error:|Error [0-9]|FAILED|Patch failed|Hunk #[0-9]+ FAILED|No rule to make target|not found' build-verbose.log 2>/dev/null | head -160 || true
 
       - name: Upload firmware and logs
         if: always()
@@ -83,6 +121,7 @@ jobs:
         with:
           name: xr1710g-datapath-test
           path: |
+            build-source.txt
             build.log
             build-verbose.log
             bin/targets/airoha/an7581/*.itb
