@@ -1,3 +1,4 @@
+# build-revision: 2
 name: Build XR1710G Datapath Test
 
 on:
