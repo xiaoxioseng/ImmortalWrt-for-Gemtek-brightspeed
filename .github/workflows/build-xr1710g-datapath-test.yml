@@ -1,4 +1,4 @@
-# build-revision: 3
+# build-revision: 4
 name: Build XR1710G Datapath Test
 
 on:
@@ -69,8 +69,15 @@ jobs:
         run: FEED_PATCHES_STRICT=1 bash scripts/apply-feed-patches.sh
 
       - name: Configure XR1710G
+        shell: bash
         run: |
           cp 1710.config .config
+          build_date=$(date -u +%Y%m%d)
+          build_sha=$(git rev-parse --short=8 HEAD)
+          build_version="${build_date}-${build_sha}"
+          sed -i "s/^CONFIG_VERSION_NUMBER=.*/CONFIG_VERSION_NUMBER=\"${build_version}\"/" .config
+          sed -i "s/^CONFIG_VERSION_CODE=.*/CONFIG_VERSION_CODE=\"${build_version}\"/" .config
+          echo "Stamped firmware version: ${build_version}"
           make defconfig
           bash scripts/check-gemtek-profile-isolation.sh --config .config
 
