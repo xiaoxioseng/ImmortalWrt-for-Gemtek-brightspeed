@@ -1,0 +1,47 @@
+From: XR1710G Community <xr1710g-community@localhost>
+Date: Wed, 30 Sep 2026 02:35:00 +0800
+Subject: [PATCH] net: airoha: evaluate HIT_UNBIND packets for bridge offload
+
+The XR1710G mesh repeater datapath can remain in PPE UNBIND state without
+raising HIT_UNBIND_RATE_REACHED. In that state airoha_ppe_check_skb() is
+never called, so the bridge fallback cannot resolve the learned FDB path to
+an mt7996 WDMA/NPU egress and no BND entry is ever installed.
+
+Runtime tracing on the XR1710G showed active bridge FDB, HWMP and MPP
+entries while drv_net_fill_forward_path was never called and the PPE bind
+table stayed empty. This means the offload preparation code was not reached,
+rather than the mesh route lookup failing.
+
+Evaluate normal HIT_UNBIND packets as well as HIT_UNBIND_RATE_REACHED.
+Once a flow is successfully bound the PPE reason changes and this path is no
+longer taken. Unbindable traffic continues on the normal software path.
+
+---
+ include/linux/soc/airoha/airoha_offload.h | 1 +
+ drivers/net/ethernet/airoha/airoha_eth.c   | 3 ++-
+ 2 files changed, 3 insertions(+), 1 deletion(-)
+
+--- a/include/linux/soc/airoha/airoha_offload.h
++++ b/include/linux/soc/airoha/airoha_offload.h
+@@ -8,6 +8,7 @@
+ #include <linux/workqueue.h>
+ 
+ enum {
++	PPE_CPU_REASON_HIT_UNBIND = 0x0e,
+ 	PPE_CPU_REASON_HIT_UNBIND_RATE_REACHED = 0x0f,
+ };
+ 
+--- a/drivers/net/ethernet/airoha/airoha_eth.c
++++ b/drivers/net/ethernet/airoha/airoha_eth.c
+@@ -646,7 +646,8 @@ static int airoha_qdma_rx_process(struct
+ 				     PKT_HASH_TYPE_L4);
+ 
+ 		reason = FIELD_GET(AIROHA_RXD4_PPE_CPU_REASON, msg1);
+-		if (reason == PPE_CPU_REASON_HIT_UNBIND_RATE_REACHED)
++		if (reason == PPE_CPU_REASON_HIT_UNBIND ||
++		    reason == PPE_CPU_REASON_HIT_UNBIND_RATE_REACHED)
+ 			airoha_ppe_check_skb(&eth->ppe->dev, q->skb, hash,
+ 					     false);
+ 
+-- 
+2.51.0
