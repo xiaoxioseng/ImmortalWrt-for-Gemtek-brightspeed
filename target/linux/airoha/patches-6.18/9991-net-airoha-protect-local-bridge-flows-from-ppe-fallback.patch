@@ -29,7 +29,7 @@ direct 10G GDM port after hardware flow offload became active.
  	int err;
  
  	if (!is_valid_ether_addr(eh->h_source) ||
-@@ -1254,7 +1255,8 @@ airoha_ppe_foe_prepare_bridge_subflow(struct airoha_ppe *ppe,
+@@ -1254,6 +1255,7 @@ airoha_ppe_foe_prepare_bridge_subflow(struct airoha_ppe *ppe,
  		return false;
  
 -	ether_addr_copy(data.eth.h_dest, eh->h_dest);
@@ -56,7 +56,7 @@ direct 10G GDM port after hardware flow offload became active.
  	if (err || stack.num_paths < 2 ||
  	    stack.path[0].type != DEV_PATH_BRIDGE) {
  		rcu_read_unlock();
-@@ -1282,7 +1292,11 @@ airoha_ppe_foe_prepare_bridge_subflow(struct airoha_ppe *ppe,
+@@ -1282,8 +1292,12 @@ airoha_ppe_foe_prepare_bridge_subflow(struct airoha_ppe *ppe,
  	 * can be an AP netdev (resolved to WDMA by entry_prepare), a direct
  	 * GDM netdev, or a DSA user port.
  	 */
@@ -70,9 +70,6 @@ direct 10G GDM port after hardware flow offload became active.
  		rcu_read_unlock();
  		dev_put(master);
  		return false;
-@@ -1299,6 +1313,7 @@ airoha_ppe_foe_prepare_bridge_subflow(struct airoha_ppe *ppe,
- 	return err;
- }
  
 --- a/net/bridge/br_device.c
 +++ b/net/bridge/br_device.c
