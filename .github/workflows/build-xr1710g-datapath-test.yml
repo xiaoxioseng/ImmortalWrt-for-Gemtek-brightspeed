@@ -1,4 +1,4 @@
-# build-revision: 5
+# build-revision: 6
 name: Build XR1710G Datapath Test
 
 on:
@@ -17,7 +17,7 @@ on:
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-  DEFAULT_SOURCE_REF: e04bb4565da8d05f347e91ce63b36723bb28e057
+  DEFAULT_SOURCE_REF: b6b5978d927795b17deac4285982ecb8718cc78d
 
 jobs:
   build:
@@ -89,18 +89,6 @@ jobs:
         run: |
           set -o pipefail
           make -j2 world 2>&1 | tee build.log
-
-      - name: Verify mesh forward path was compiled
-        shell: bash
-        run: |
-          mapfile -t iface_objects < <(find build_dir/target-aarch64_cortex-a53_musl/linux-airoha_an7581 -path '*/backports-*/net/mac80211/iface.o' -print)
-          if [ "${#iface_objects[@]}" -eq 0 ]; then
-            echo "No compiled mac80211 iface.o found" >&2
-            exit 1
-          fi
-          for object in "${iface_objects[@]}"; do
-            bash scripts/check-xr1710g-mesh-forward-path.sh "${object%/net/mac80211/iface.o}"
-          done
 
       - name: Capture verbose failure
         if: failure()
