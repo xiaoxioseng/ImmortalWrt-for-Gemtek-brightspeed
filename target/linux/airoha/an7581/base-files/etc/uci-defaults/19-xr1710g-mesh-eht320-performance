@@ -1,0 +1,29 @@
+#!/bin/sh
+# XR1710G wireless-mesh runtime profile.
+#
+# Never rewrite radio-wide user configuration during sysupgrade. In
+# particular, preserve channel, htmode/bandwidth, SSID, Mesh ID, keys and
+# beamforming settings exactly as configured by the user. Only keep the
+# existing 802.11s backhaul forwarding enabled and disable mesh power save.
+
+. /lib/functions/system.sh
+
+[ "$(board_name 2>/dev/null)" = "gemtek,xr1710g-ubi" ] || exit 0
+
+changed=0
+for iface in $(uci -q show wireless 2>/dev/null | sed -n \
+	-e "s/^wireless\.\([^.=]*\)\.mode='mesh'$/\1/p" \
+	-e "s/^wireless\.\([^.=]*\)\.mode=mesh$/\1/p"); do
+	uci -q set wireless."$iface".mesh_fwding='1'
+	uci -q set wireless."$iface".powersave='0'
+	uci -q set wireless."$iface".mesh_power_mode='active'
+	changed=1
+done
+
+if [ "$changed" -eq 1 ]; then
+	uci -q commit wireless
+	logger -t xr1710g-mesh-perf \
+		"kept mesh forwarding active without changing radio channel or bandwidth"
+fi
+
+exit 0

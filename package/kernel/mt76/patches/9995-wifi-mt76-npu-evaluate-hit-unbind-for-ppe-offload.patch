@@ -1,0 +1,31 @@
+From: XR1710G Community <xr1710g-community@localhost>
+Date: Wed, 30 Sep 2026 02:36:00 +0800
+Subject: [PATCH] wifi: mt76: NPU: evaluate HIT_UNBIND packets for PPE offload
+
+Mirror the Airoha Ethernet-side unbind handling on the MT7996 NPU RX path.
+Mesh bridge traffic can stay in PPE UNBIND state without producing the rate
+threshold reason, preventing airoha_ppe_dev_check_skb() from ever preparing
+the reverse Wi-Fi-to-wired hardware path.
+
+Evaluate both HIT_UNBIND and HIT_UNBIND_RATE_REACHED. Bound flows leave this
+path automatically; flows that cannot be offloaded continue through the
+normal software datapath.
+
+---
+ npu.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+--- a/npu.c
++++ b/npu.c
+@@ -417,7 +417,8 @@ void mt76_npu_check_ppe(struct mt76_dev
+ 	skb_set_hash(skb, hash, PKT_HASH_TYPE_L4);
+ 
+ 	reason = FIELD_GET(NPU_RX_DMA_CRSN_MASK, info);
+-	if (reason == PPE_CPU_REASON_HIT_UNBIND_RATE_REACHED) {
++	if (reason == PPE_CPU_REASON_HIT_UNBIND ||
++	    reason == PPE_CPU_REASON_HIT_UNBIND_RATE_REACHED) {
+ 		skb_set_mac_header(skb, 0);
+ 		airoha_ppe_dev_check_skb(ppe_dev, skb, hash, true);
+ 	}
+-- 
+2.51.0

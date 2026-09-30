@@ -8,6 +8,10 @@ FEATURES+=pwm
 DEFAULT_PACKAGES += \
 	airoha-en7581-npu-firmware uboot-envtools
 
+ifeq ($(CONFIG_TARGET_airoha_an7581_DEVICE_gemtek_xr1710g-ubi),y)
+DEFAULT_PACKAGES += kmod-br-netfilter
+endif
+
 define Target/Description
 	Build firmware images for Airoha an7581 ARM based boards.
 endef

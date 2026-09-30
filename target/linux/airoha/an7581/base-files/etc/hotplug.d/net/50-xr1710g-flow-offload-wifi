@@ -1,0 +1,38 @@
+#!/bin/sh
+# XR1710G: refresh fw4 hardware flowtable after dynamic Wi-Fi interfaces
+# appear. netifd creates AP/802.11s interfaces after the initial firewall
+# start, so without a reload they can be absent from the PPE flowtable and
+# bridged Ethernet<->Wi-Fi/Mesh traffic stays on the CPU path.
+
+. /lib/functions/system.sh
+
+[ "$(board_name 2>/dev/null)" = "gemtek,xr1710g-ubi" ] || exit 0
+[ "$ACTION" = "add" ] || exit 0
+
+DEV="${DEVICENAME:-$INTERFACE}"
+[ -n "$DEV" ] || exit 0
+[ -e "/sys/class/net/$DEV/phy80211" ] || exit 0
+
+(
+	exec 9>/var/lock/xr1710g-flow-offload-wifi.lock
+	flock -n 9 || exit 0
+
+	# Let concurrent radio/interface creation and nl80211 registration settle.
+	# One reload after this grace interval is preferable to one reload per band.
+	sleep 2
+
+	TYPE="$(iw dev "$DEV" info 2>/dev/null | sed -n 's/^[[:space:]]*type[[:space:]]*//p' | head -n1)"
+	case "$TYPE" in
+		AP|"mesh point") ;;
+		*) exit 0 ;;
+	esac
+
+	# fw4 may already have learned the device while we were waiting.
+	nft list flowtable inet fw4 ft 2>/dev/null | grep -qw -- "$DEV" && exit 0
+
+	logger -t xr1710g-flow-offload \
+		"reload fw4 to add $DEV ($TYPE) to hardware flowtable"
+	/etc/init.d/firewall reload >/dev/null 2>&1
+) &
+
+exit 0

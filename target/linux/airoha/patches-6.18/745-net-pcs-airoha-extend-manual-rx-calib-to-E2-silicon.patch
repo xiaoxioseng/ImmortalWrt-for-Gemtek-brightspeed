@@ -1,0 +1,25 @@
+From: Gilly1970 <noreply@example.invalid>
+Date: Sat, 26 Sep 2026 00:00:00 +0000
+Subject: [PATCH] net: pcs: airoha: extend manual RX calibration to E2 silicon
+
+AN7581 E2 silicon (PRODUCT_ID 2) can still require the manual USXGMII
+RX calibration path used by earlier revisions. On affected Gemtek
+boards the hardware/default path can leave stale TFCK/DA_RX state and
+produce intermittent receive-side stalls on the direct 10G GDM port.
+
+The same calibration routine has been exercised on an affected E2
+Gemtek W1700K with 16/16 automatic LAN2 RX tests completing at about
+204--211 MB/s with no failures. Keep hardware calibration for E3 and
+later silicon, but include E2 in the manual path.
+
+This is especially relevant to Gemtek AN7581 boards whose direct 10G
+LAN port uses the same Airoha PCS/USXGMII block as XR1710G LAN2.
+
+The SoC-revision decision is made in the common PCS probe, so patch
+pcs-airoha-common.c rather than the AN7581 bring-up implementation.
+
+--- a/drivers/net/pcs/airoha/pcs-airoha-common.c
++++ b/drivers/net/pcs/airoha/pcs-airoha-common.c
+@@ -1 +1 @@
+-		if (FIELD_GET(AIROHA_SCU_PRODUCT_ID, val) < 0x2)
++		if (FIELD_GET(AIROHA_SCU_PRODUCT_ID, val) < 0x3)
