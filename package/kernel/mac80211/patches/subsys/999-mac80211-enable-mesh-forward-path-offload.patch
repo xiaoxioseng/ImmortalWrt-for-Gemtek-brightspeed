@@ -20,6 +20,11 @@ changing mesh state.
 This allows bridge/PPE flow offload to reuse mac80211's current mesh route
 selection while preserving software handling for non-offloaded traffic.
 
+Use the backports CPTCFG_MAC80211_MESH symbol. CONFIG_MAC80211_MESH is
+not defined by the target kernel, which disables its in-tree mac80211.
+Using that symbol silently compiles out the mesh case while leaving the
+forward-path callback installed, so mesh lookups always return -ENOENT.
+
 ---
  net/mac80211/iface.c | 37 +++++++++++++++++++++++++++++++++++++
  1 file changed, 37 insertions(+)
@@ -48,7 +53,7 @@ selection while preserving software handling for non-offloaded traffic.
  
  		sta = sta_info_get(sdata, sdata->deflink.u.mgd.bssid);
  		break;
-+#ifdef CONFIG_MAC80211_MESH
++#ifdef CPTCFG_MAC80211_MESH
 +	case NL80211_IFTYPE_MESH_POINT: {
 +		struct mesh_path *mpath, *mppath;
 +
